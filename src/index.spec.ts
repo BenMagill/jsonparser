@@ -1,12 +1,9 @@
-import JSON2 from "./index";
+import { JSONX } from "./index";
 
-// describe('JSONparser tests', function () {
-
-//     it.todo("")
-// });
-
-
-console.log(new JSON2({}, [{name: "Extension", parse: function(...args: any[]) {
-    console.log(args)
-    return 1
-}, stringify: function() {}, canStringify: () => false}])._extension.parse('Extension("data1", "2")'))
+describe('JSON Parser', () => {
+    describe('Constants', () => {
+        it('Will parse true', () => {
+            expect(new JSONX().parse('true')).toBe(true)
+        })
+    });
+});

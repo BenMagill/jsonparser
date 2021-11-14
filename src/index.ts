@@ -1,257 +1,350 @@
-/**
- * JSON parser
- * FEATURES
- *  - support for extensions to parse and stringify fields in certain ways
- *      -  when parsing : checks included extensions first when uses preincluded parsers
- *      -  when stringifying : check data using extensions first then use defaults
- *          if is a class or object being parsed check if a function .stringify() exists on it. 
- *          if so run this to get the output for the extension
- *          extensions could use instanceof to see if the class should be stringified 
- * 
- * Setup:
- *  var json2 = new JSON2([
- *      extensions go here
- *  ])
- * 
- *  var parsed = json2.parse(string)
- * 
- *  var string = json2.toString(data)
- * 
- *  extensions I will include 
- *  - objectId parsing for mongodb
- *      if input is a valid objectid when stringify will store as ObjectId(value)
- *      if value starts with ObjectId(value) when parsing will run Mongodb.ObjectId(value)
- * 
- *  inbuild parsers and validators 
- *  - string
- *  - number
- *  - array 
- *  - object
- *  - extension
- * 
- */
-
-// TODO move all parsers from seperate files to within this class
-
-export const numbers = ["0","1","2","3","4","5","6","7","8","9"]
-
 export enum ValueType {
     OBJECT= "OBJECT", 
     ARRAY= "ARRAY",
     STRING= "STRING", 
     NUMBER= "NUMBER",
-    EXTENSION="EXTENSION"
+    EXTENSION="EXTENSION",
+    CONSTANT="CONSTANT",
+    UNKNOWN="UNKNOWN"
 }
 
 export type Extension = {
     parse: Function,
     stringify: Function,
+    isValid: Function,
     name: string,
-    canStringify: Function
 }
 
 export type ExtensionInternal = {
     parse: Function,
     stringify: Function,
+    isValid: Function,
 }
 
-export class JSON2 {
-    options = {}
-    extensions: {
-        [key: string]: ExtensionInternal;
-    } = {}
+type Extensions = {
+    [ExtensionName: string]: ExtensionInternal;
+}
 
-    constructor(options?: Object, extensions?: Extension[]) {
-        this.options = options || this.options
+type InternalParseResult<T = any> = [T, number];
+
+const numbers = ["0","1","2","3","4","5","6","7","8","9"]
+
+const whitespace = [
+    " ",
+    "\u0020",
+    "\u000A",
+    "\u000D",
+    "\u0009",
+]
+
+const controlCharacters = [
+    "\"",
+    "\\",
+    "/",
+    "b",
+    "f",
+    "n",
+    "r",
+    "t",
+    // TODO if the below then the next 4 chars after are important
+    "u"
+]
+
+const constants: any = {
+    "true": true,
+    "false": false,
+    "null": null
+}
+
+class UnexpectedCharError extends Error {
+    constructor(character: string, poition: number) {
+        super(`Unexpected character ${character} at position ${poition}`);
+        this.name = "UnexpectedCharacter"
+      }
+}
+
+export class JSONX {
+    options = {
+        // Insert default options here
+        ignoreBrokenExtension: true,
+         
+    }
+
+    extensions: Extensions = {
+        Test1: {
+            parse: (...args: any) => {
+                console.log(args)
+                return 0
+            },
+            stringify: () => {
+
+            },
+            isValid: () => {
+                
+            }
+        }
+    }
+
+    constructor(options: Object = {}, extensions?: Extension[]) {
+        this.options = { ...this.options, ...options }
 
         if (extensions) {
             extensions.forEach(extension => {
-                if (extension.parse && extension.stringify) {
+                if (extension.parse && extension.stringify && extension.name) {
                     this.extensions[extension.name] = {
                         parse: extension.parse,
                         stringify: extension.stringify,
+                        isValid: extension.isValid,
+                    }
+                } else {
+                    if (!this.options.ignoreBrokenExtension) {
+                        throw new Error(`Extension "${extension.name}" is missing properties`);
                     }
                 }
             });
         }
     }
 
-    parse(input: string) {
-        const type = this.getType(input)
-
-        switch (type) {
-            case ValueType.STRING:
-                return this._string.parse(input)
-            case ValueType.NUMBER:
-                return this._number.parse(input)
-            case ValueType.ARRAY:
-                return this._string.parse(input)
-            case ValueType.OBJECT:
-                return this._string.parse(input)
-            case ValueType.EXTENSION:
-                return this._extension.parse(input)
-        
-            default:
-                break;
-        }
+    getType(charsArr: string[]) {
+        const chars = charsArr.join();
+        if (chars[0] === "[") return ValueType.ARRAY
+        else if (chars[0] === "{") return ValueType.OBJECT
+        else if (chars[0] === '"') return ValueType.STRING
+        // Starts with numbers
+        else if (/^[0-9]/.test(chars)) return ValueType.NUMBER
+        // Starts with letters then a bracket
+        else if (/^[a-zA-Z]*\(/.test(chars)) return ValueType.EXTENSION
+        else if (/^[a-zA-Z]*/.test(chars)) return ValueType.EXTENSION
+        return ValueType.UNKNOWN
     }
 
-    stringify(data: any) {
-
-    }
-
-    getType(input: string) {
-        if (input[0] === "[") return ValueType.ARRAY
-        else if (input[0] === "{") return ValueType.OBJECT
-        else if (input[0] === '"') return ValueType.STRING
-        else if (numbers.indexOf(input[0]) != -1) return ValueType.NUMBER
-        else if (/[a-zA-z][a-zA-Z0-9]+\(/.test(input)) return ValueType.EXTENSION
-        else {
-            throw new Error("Cant determine type of value :(")
-        }
-    }
-
-    getEndOf(str: string): number {
-        const type = this.getType(str)
-
-        switch (type) {
-            case ValueType.STRING:
-                return this._string.getEnd(str)
-            case ValueType.NUMBER:
-                return this._number.getEnd(str)
-            case ValueType.ARRAY:
-                return this._string.getEnd(str)
-            case ValueType.OBJECT:
-                return this._string.getEnd(str)
-            case ValueType.EXTENSION:
-                return this._extension.getEnd(str)
-        
-            default:
-                return str.length
-        }
-    }
-
-    _string = {
-        parse: function(input: string) {
-            const inputArr = input.split("")
-            var foundEndQuote = false
-            var value = ""
-            var escapeNext = false
-            var i = 0
-            while (i < inputArr.length && !foundEndQuote ) {
-                let justEscaped = false
-                i = i+1
-                var char = inputArr[i]
-                if (char === "\\" && !escapeNext) {
-                    escapeNext = true
-                    justEscaped = true
-                } 
-                if (!escapeNext &&  char === '"') {
-                    foundEndQuote = true
-                } else {
-                    value += char
-                }
-                
-                if (!justEscaped) {
-                    escapeNext = false
-                }
-            }
-            return value
-        },
-        getEnd: function(input: string) {
-            const inputArr = input.split("")
-            var foundEndQuote = false
-            var value = ""
-            var escapeNext = false
-            var i = 0
-            while (i < inputArr.length && !foundEndQuote ) {
-                let justEscaped = false
-                i = i+1
-                var char = inputArr[i]
-                if (char === "\\" && !escapeNext) {
-                    escapeNext = true
-                    justEscaped = true
-                } 
-                if (!escapeNext &&  char === '"') {
-                    foundEndQuote = true
-                } else {
-                    value += char
-                }
-                
-                if (!justEscaped) {
-                    escapeNext = false
-                }
-            }
-
-            return i
-        }
-    }
-
-    _number = {
-        parse: function(input: string) {
-            const inputArr = input.split("")
+    // These will return that data and how many chars to move forward
+    parsers = {
+        string: (chars: string[], currIndex: number): InternalParseResult<string>  => {
             var output = ""
-            for (let i = 0; i < inputArr.length; i++) {
-                const num = inputArr[i];
-                if(numbers.includes(num)) {
-                    output += num
+            // First char will be " so skip
+            var index = 1
+            while (index < chars.length) {
+                const char = chars[index++]
+                if (char === "\\") {
+                    // TODO handle escape characters better (should handle unicode characters)
+                    output+= "\\" + chars[index++]
+                } else if (char === '"') {
+                    return [output, index]
                 } else {
-                    throw new Error(`Invalid number ${input}`)
+                    output+=char
                 }
             }
-            return Number(output)
+            // TODO if gets to end and no " then error
+            return ["", 0]
         },
-        getEnd: function(input: string) {
-            return input.indexOf(",")-1
-        }
-    }
-
-    _extension = {
-        parse: (input: string): any => {
-            const [extensionName, ...rest] = input.split("(")
-            console.log({extensionName})
-            let restStr = rest.join("(").substring(0, rest.join("(").length-1)
-            console.log({restStr})
-            console.log(this)
-            const extensionArgs = [];
-
-            if (restStr[restStr.length-1] !== ",") restStr += ","
-            while (restStr.length > 0) {
-                const endOfParam = this.getEndOf(restStr);
-                const data = restStr.slice(0, endOfParam+1)
-                restStr = restStr.slice(endOfParam+1, restStr.length)
-                if (restStr[0]  === ",") restStr = restStr.substring(1).trim()
-                extensionArgs.push(this.parse(data))
+        number: (chars: string[], currIndex: number): InternalParseResult<number>  => {
+            // TODO this need to be improved a lot to follow the spec
+            var index = 0;
+            var output = ""
+            while (index < chars.length) {
+                const char = chars[index++]
+                if (numbers.includes(char)) {
+                    output += char
+                } else {
+                    return [Number(output), --index]
+                }
             }
-            // const data = this.parse(restStr)
-            // console.log({data})
-            console.log({extensionName, extensionArgs})
-            return this.extensions[extensionName].parse(...extensionArgs)
+            return [Number(output), index]
         },
-        getEnd: (str: string) => {
-            // TODO
-            return 0
+        object: (chars: string[], currIndex: number): InternalParseResult<object> => {
+            // Skip assumed { and then whitespace
+            var index = this.skipWhitespace(chars.slice(1))+1;
+            var output: any = {}
+            console.log(index)
+
+            while (index < chars.length) {
+                index+=this.skipWhitespace(chars.slice(index))
+                const char = chars[index++]
+                // Expect a string for the key
+                if (char === '"') {
+                    index--
+                    const [key, skip] = this.parsers.string(chars.slice(index), index)
+                    console.log({key, skip})
+                    index+=skip
+                    // get next characters index, ignoring whitespace
+                    index+=this.skipWhitespace(chars.slice(index))
+                    if (chars[index] !== ":") {
+                        throw new UnexpectedCharError(chars[index], currIndex+index)
+                    }
+                    index++
+                    // skip whitespace again
+                    index+=this.skipWhitespace(chars.slice(index))
+
+                    // Parse the value
+                    const [value, valueSkip] = this.parseInternal(chars.slice(index))
+                    console.log({value, valueSkip})
+                    output[key] = value
+
+                    index+=valueSkip
+                    index+=this.skipWhitespace(chars.slice(index))
+                    const char = chars[index++]
+                    if ( char === ",") {
+                        // go for another round
+                    } else if (char === "}") {
+                        // end of object
+                        return [output, index+1]
+                    } else {
+                        throw new UnexpectedCharError(char, currIndex+index)
+                    }
+
+                    console.log(chars.slice(index))
+                } else {
+                    // unexpected {char} at pos
+                    throw new UnexpectedCharError(char, currIndex+index)
+                }
+            
+            }
+
+            return [{}, 0]
+        },
+        array: (chars: string[], currIndex: number): InternalParseResult<any[]> => {
+            var index = this.skipWhitespace(chars.slice(1))+1;
+            var output: any[] = []
+
+            while (index < chars.length) {
+                console.log(chars.slice(index).join(""))
+                const [data, skip] = this.parseInternal(chars.slice(index))
+                console.log({data, skip})
+                output.push(data)
+                index+=skip
+                index+=this.skipWhitespace(chars.slice(index))
+                const char = chars[index++]
+                console.log(char)
+
+                if (char === "]") {
+                    return [output, index]
+                } else if (char !== ",") {
+                    throw new UnexpectedCharError(char, currIndex+index-1)
+                }
+                // expect a , 
+                index+=this.skipWhitespace(chars.slice(index))
+            }
+
+            return [[], 0]
+        },
+        // TODO finsh later
+        extension: (chars: string[], currIndex: number): InternalParseResult<unknown> => {
+            var index = this.skipWhitespace(chars.slice(1));
+            var name = ""
+            while (index < chars.length) {
+                const char = chars[index++]
+                if (/[a-zA-Z\d]+/.test(char)) {
+                    name += char
+                } else if (char === "(") {
+                    var parameters = []
+                    // check extension exists
+                    if (!this.extensions[name]) {
+                        // TODO create proper error
+                        throw new Error("No extension with name " + name)
+                    } 
+                    // Start parsing data
+                    while (index < chars.length) {
+                        if (chars[index] === ")") {
+                            // execute extension (its already been checked if it exists)
+                            return [this.extensions[name].parse(...parameters), ++index]
+                        }
+                        console.log(chars.slice(index).join(""))
+                        const [data, skip] = this.parseInternal(chars.slice(index))
+                        console.log({data, skip})
+                        parameters.push(data)
+                        index+=skip
+                        index+=this.skipWhitespace(chars.slice(index))
+                        const char = chars[index++]
+                        console.log(char)
+        
+                        if (char === ")") {
+                            // execute extension (its already been checked if it exists)
+                            return [this.extensions[name].parse(...parameters), index]
+                        } else if (char !== ",") {
+                            throw new UnexpectedCharError(char, currIndex+index-1)
+                        }
+                        // expect a , 
+                        index+=this.skipWhitespace(chars.slice(index))
+                    }
+                } else {
+                    throw new UnexpectedCharError(char, currIndex+index-1)
+                }
+            }
+            return [null, 0]
+        },
+        constant: (chars: string[], currIndex: number): InternalParseResult<any> => {
+            var index = this.skipWhitespace(chars.slice(1));
+            var name = ""
+            while (index < chars.length) {
+                const char = chars[index++]
+                if (/[a-zA-Z\d]+/.test(char)) {
+                    name += char
+                } else {
+                    return [constants[name], index]
+                }
+            }
+            if (name in constants) {
+                return [constants[name], index]
+            } else {
+                // TODO throw error 
+                return [null, index]
+            }
         }
     }
 
-    _array = {
-        parse: () => {
+    // Parse and allow for extra characters to be at the end
+    parseInternal(chars: string[]): [any, number] {
+        var pointer = 0;
+        pointer+=this.skipWhitespace(chars)
+        // now no whitespace at start
+        var type = this.getType(chars.slice(pointer));
 
-        },
-        getEnd: () => {
+        // now parse
+            
+        if (type === ValueType.STRING) {
+            return this.parsers.string(chars.slice(pointer), pointer)
+        } else if (type === ValueType.NUMBER) {
+            return this.parsers.number(chars.slice(pointer), pointer)
+        } else if (type === ValueType.OBJECT) {
+            return this.parsers.object(chars.slice(pointer), pointer)
+        } else if (type === ValueType.ARRAY) {
 
         }
+
+        // var length = chats.length
+        // var type;
+        // var output: any;
+    
+        // while (pointer < length) {
+        //     var char = chars[pointer++]
+            
+        // }
+        return [null, 0]
     }
 
-    _object = {
-        parse: () => {
+    // Parser accessed by users
+    parse(input: string) {
+        const [data, pointer] = this.parseInternal(input.split(""))
+        console.log({data, pointer})
+        // TODO ensure all characters consumed
+    }
 
-        },
-        getEnd: () => {
-
+    skipWhitespace(chars: string[]) {
+        var index = 0;
+        while (whitespace.includes(chars[index])) {
+            index += 1
         }
+        return index
     }
     
 }
 
-export default JSON2
+// new JSONX().parse('"hi there"')
+// console.log(new JSONX().parsers.string('"1"'.split(""), 0))
+// console.log(new JSONX().parsers.number('123'.split(""), 0))
+// console.log(new JSONX().parsers.object('{   "hi"   : 111, "key2": "value2"}    '.split(""), 0))
+// console.log(new JSONX().parsers.array('["hello", "hi", 123, "hi"]'.split(""), 0))
+// console.log(new JSONX().parsers.extension('Test1("")'.split(""), 0))
+console.log(new JSONX().parsers.constant('false'.split(""), 0))
+// console.log(new JSONX().parseInternal('{   "hi"   : 111, "key2": "value2"}    '.split("")))
