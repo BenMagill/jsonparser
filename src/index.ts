@@ -114,7 +114,7 @@ export class JSONX {
         else if (/^[0-9]/.test(chars)) return ValueType.NUMBER
         // Starts with letters then a bracket
         else if (/^[a-zA-Z]*\(/.test(chars)) return ValueType.EXTENSION
-        else if (/^[a-zA-Z]*/.test(chars)) return ValueType.EXTENSION
+        else if (/^[a-zA-Z]*/.test(chars)) return ValueType.CONSTANT
         return ValueType.UNKNOWN
     }
 
@@ -245,6 +245,7 @@ export class JSONX {
                     } 
                     // Start parsing data
                     while (index < chars.length) {
+                        index+=this.skipWhitespace(chars.slice(index))
                         if (chars[index] === ")") {
                             // execute extension (its already been checked if it exists)
                             return [this.extensions[name].parse(...parameters), ++index]
@@ -288,7 +289,7 @@ export class JSONX {
                 return [constants[name], index]
             } else {
                 // TODO throw error 
-                return [null, index]
+                throw new UnexpectedCharError(chars[this.skipWhitespace(chars.slice(1))], currIndex+this.skipWhitespace(chars.slice(1)))
             }
         }
     }
@@ -309,7 +310,11 @@ export class JSONX {
         } else if (type === ValueType.OBJECT) {
             return this.parsers.object(chars.slice(pointer), pointer)
         } else if (type === ValueType.ARRAY) {
-
+            return this.parsers.array(chars.slice(pointer), pointer)
+        } else if (type === ValueType.EXTENSION) {
+            return this.parsers.extension(chars.slice(pointer), pointer)
+        } else if (type === ValueType.CONSTANT) {
+            return this.parsers.constant(chars.slice(pointer), pointer)
         }
 
         // var length = chats.length
@@ -327,6 +332,12 @@ export class JSONX {
     parse(input: string) {
         const [data, pointer] = this.parseInternal(input.split(""))
         console.log({data, pointer})
+        console.log(input.split("").length)
+        if (pointer+this.skipWhitespace(input.split("").slice(pointer)) === input.split("").length) {
+            return data
+        } else {
+            throw new UnexpectedCharError('TODO', pointer+this.skipWhitespace(input.split("").slice(pointer)))
+        }
         // TODO ensure all characters consumed
     }
 
@@ -345,6 +356,6 @@ export class JSONX {
 // console.log(new JSONX().parsers.number('123'.split(""), 0))
 // console.log(new JSONX().parsers.object('{   "hi"   : 111, "key2": "value2"}    '.split(""), 0))
 // console.log(new JSONX().parsers.array('["hello", "hi", 123, "hi"]'.split(""), 0))
-// console.log(new JSONX().parsers.extension('Test1("")'.split(""), 0))
-console.log(new JSONX().parsers.constant('false'.split(""), 0))
+// console.log(new JSONX().parsers.extension('Test1()'.split(""), 0))
+// console.log(new JSONX().parsers.constant('false'.split(""), 0))
 // console.log(new JSONX().parseInternal('{   "hi"   : 111, "key2": "value2"}    '.split("")))
