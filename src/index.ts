@@ -74,7 +74,7 @@ export class JSONX {
         Test1: {
             parse: (...args: any) => {
                 console.log(args)
-                return 0
+                return args
             },
             stringify: () => {
 
@@ -106,14 +106,15 @@ export class JSONX {
     }
 
     getType(charsArr: string[]) {
-        const chars = charsArr.join();
+        const chars = charsArr.join("");
+        console.log(chars)
         if (chars[0] === "[") return ValueType.ARRAY
         else if (chars[0] === "{") return ValueType.OBJECT
         else if (chars[0] === '"') return ValueType.STRING
         // Starts with numbers
         else if (/^[0-9]/.test(chars)) return ValueType.NUMBER
         // Starts with letters then a bracket
-        else if (/^[a-zA-Z]*\(/.test(chars)) return ValueType.EXTENSION
+        else if (/[a-zA-Z][a-zA-Z0-9]*\(/.test(chars)) return ValueType.EXTENSION
         else if (/^[a-zA-Z]*/.test(chars)) return ValueType.CONSTANT
         return ValueType.UNKNOWN
     }
@@ -136,6 +137,7 @@ export class JSONX {
                 }
             }
             // TODO if gets to end and no " then error
+            throw Error("unexpected EOF")
             return ["", 0]
         },
         number: (chars: string[], currIndex: number): InternalParseResult<number>  => {
@@ -194,13 +196,14 @@ export class JSONX {
                     }
 
                     console.log(chars.slice(index))
+                } else if (char === "}") {
+                    // end of object
+                    return [output, index+1]
                 } else {
                     // unexpected {char} at pos
                     throw new UnexpectedCharError(char, currIndex+index)
                 }
-            
             }
-
             return [{}, 0]
         },
         array: (chars: string[], currIndex: number): InternalParseResult<any[]> => {
@@ -302,6 +305,7 @@ export class JSONX {
         var type = this.getType(chars.slice(pointer));
 
         // now parse
+        console.log(type)
             
         if (type === ValueType.STRING) {
             return this.parsers.string(chars.slice(pointer), pointer)
@@ -312,6 +316,7 @@ export class JSONX {
         } else if (type === ValueType.ARRAY) {
             return this.parsers.array(chars.slice(pointer), pointer)
         } else if (type === ValueType.EXTENSION) {
+            console.log("extension")
             return this.parsers.extension(chars.slice(pointer), pointer)
         } else if (type === ValueType.CONSTANT) {
             return this.parsers.constant(chars.slice(pointer), pointer)
@@ -333,10 +338,10 @@ export class JSONX {
         const [data, pointer] = this.parseInternal(input.split(""))
         console.log({data, pointer})
         console.log(input.split("").length)
-        if (pointer+this.skipWhitespace(input.split("").slice(pointer)) === input.split("").length) {
+        if (pointer+this.skipWhitespace(input.split("").slice(pointer)) >= input.split("").length) {
             return data
         } else {
-            throw new UnexpectedCharError('TODO', pointer+this.skipWhitespace(input.split("").slice(pointer)))
+            throw new UnexpectedCharError(input.split("")[pointer+this.skipWhitespace(input.split("").slice(pointer))], pointer+this.skipWhitespace(input.split("").slice(pointer)))
         }
         // TODO ensure all characters consumed
     }
@@ -355,7 +360,9 @@ export class JSONX {
 // console.log(new JSONX().parsers.string('"1"'.split(""), 0))
 // console.log(new JSONX().parsers.number('123'.split(""), 0))
 // console.log(new JSONX().parsers.object('{   "hi"   : 111, "key2": "value2"}    '.split(""), 0))
+// console.log(new JSONX().parsers.object('{"a":1, "obj":"{}"}'.split(""), 0))
 // console.log(new JSONX().parsers.array('["hello", "hi", 123, "hi"]'.split(""), 0))
-// console.log(new JSONX().parsers.extension('Test1()'.split(""), 0))
 // console.log(new JSONX().parsers.constant('false'.split(""), 0))
 // console.log(new JSONX().parseInternal('{   "hi"   : 111, "key2": "value2"}    '.split("")))
+// console.log(new JSONX().parsers.extension('Test1()'.split(""), 0))
+// console.log(new JSONX().parse('Test1()'))
