@@ -57,10 +57,36 @@ describe('JSON Parser', () => {
             expect(new JSONX().parse('[[""]]')).toStrictEqual([[""]])
         });
         it('will parse an array with object', () => {
-            expect(new JSONX().parse('[{}]')).toStrictEqual([true])
+            expect(new JSONX().parse('[{"test":"yes"}]')).toStrictEqual([{"test":"yes"}])
         });
         it('will parse an array with whitespace', () => {
             expect(new JSONX().parse('[ "" ]')).toStrictEqual([ "" ])
+        });
+        it('will parse an array with multiple items', () => {
+            expect(new JSONX().parse('[ "test1", "test2" ]')).toStrictEqual([ "test1", "test2" ])
+        });
+    });
+    describe('Object', () => {
+        it('will parse an empty object', () => {
+            expect(new JSONX().parse('{}')).toBe({})
+        });
+        it('will parse an object with values', () => {
+            expect(new JSONX().parse('{"a":1, "obj":{}}')).toBe({"a":1, "obj":{}})
+        });
+        it('will parse an object with whitespace', () => {
+            expect(new JSONX().parse('{ "a" : 1 , "obj" : { } }')).toBe({"a":1, "obj":{}})
+        });
+    });
+    describe('Extension', () => {
+        // TODO add
+        it('will parse an extension with no params', () => {
+            expect(new JSONX().parse('Test1()')).toBe({})
+        });
+        it('will parse an object with values', () => {
+            expect(new JSONX().parse('{"a":1, "obj":{}}')).toBe({"a":1, "obj":{}})
+        });
+        it('will parse an object with whitespace', () => {
+            expect(new JSONX().parse('{ "a" : 1 , "obj" : { } }')).toBe({"a":1, "obj":{}})
         });
     });
     describe('Other', () => {
