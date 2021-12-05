@@ -209,7 +209,9 @@ export class JSONX {
         array: (chars: string[], currIndex: number): InternalParseResult<any[]> => {
             var index = this.skipWhitespace(chars.slice(1))+1;
             var output: any[] = []
-
+            if (chars[index] === "]") {
+                return [output, index+1]
+            }
             while (index < chars.length) {
                 console.log(chars.slice(index).join(""))
                 const [data, skip] = this.parseInternal(chars.slice(index))
@@ -285,7 +287,7 @@ export class JSONX {
                 if (/[a-zA-Z\d]+/.test(char)) {
                     name += char
                 } else {
-                    return [constants[name], index]
+                    return [constants[name], --index]
                 }
             }
             if (name in constants) {
@@ -365,4 +367,4 @@ export class JSONX {
 // console.log(new JSONX().parsers.constant('false'.split(""), 0))
 // console.log(new JSONX().parseInternal('{   "hi"   : 111, "key2": "value2"}    '.split("")))
 // console.log(new JSONX().parsers.extension('Test1()'.split(""), 0))
-// console.log(new JSONX().parse('Test1()'))
+// console.log(new JSONX().parse('[]'))

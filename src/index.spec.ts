@@ -42,13 +42,13 @@ describe('JSON Parser', () => {
     });
     describe('Array', () => {
         it('will parse an empty array', () => {
-            expect(new JSONX().parse('[]')).toBe([])
+            expect(new JSONX().parse('[]')).toStrictEqual([])
         });
         it('will parse an array with string', () => {
             expect(new JSONX().parse('[""]')).toStrictEqual([""])
         });
         it('will parse an array with number', () => {
-            expect(new JSONX().parse('[1234]]')).toStrictEqual([1234])
+            expect(new JSONX().parse('[1234]')).toStrictEqual([1234])
         });
         it('will parse an array with constant', () => {
             expect(new JSONX().parse('[true]')).toStrictEqual([true])
