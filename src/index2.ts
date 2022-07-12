@@ -1,9 +1,3 @@
-/**
- * Extensions
- * 
- * name()
- */
-
 const debug_print = true;
 function debug(...args: any[]) {
     if (debug_print) {
@@ -252,7 +246,7 @@ function parseExtension(name: string, store: InputStore) {
     return new UnprocessedExtension(name, args)
 }
 
-// TODO
+// TODO finish
 function parseNumber(store: InputStore) {
     let buffer = ''
     while (store.hasNext()) {
