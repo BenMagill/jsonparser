@@ -15,7 +15,7 @@ function throwUnexpectedCharError(store: InputStore) {
     throw new Error(`Unexpected char ${store.getCurrentChar()} at position ${store.index-1}`)
 }
 
-const constants = {
+const constants: { [key: string]: any } = {
     "true": true,
     "false": false,
     "null": null
@@ -30,6 +30,17 @@ const whitespace = [
     "\u000D",
     "\u0009",
 ]
+
+class UnprocessedExtension {
+    name: string
+
+    args: any[]
+
+    constructor(name: string, args: any[]) {
+        this.name = name
+        this.args = args
+    }
+}
 
 class InputStore {
     data: string[];
@@ -49,7 +60,7 @@ class InputStore {
     }
 
     hasNext() {
-        if (this.data[this.index+1]) {
+        if (this.data[this.index]) {
             return true;
         } else {
             return false;
@@ -60,7 +71,6 @@ class InputStore {
         let i = this.index;
         while (i < this.data.length) {
             const char = this.data[i++]
-            console.log(char)
             if (whitespace.includes(char)) {
                 debug('skipping whitespace')
                 continue;
@@ -71,6 +81,22 @@ class InputStore {
         }
     }
 
+    peekNextNonWhitespace() {
+        let i = this.index;
+        while (i < this.data.length) {
+            const char = this.data[i++]
+            if (whitespace.includes(char)) {
+                debug('skipping whitespace')
+                continue;
+            } else {
+                return char;
+            }
+        }
+    }
+
+    goBack() {
+        this.index--
+    }
 }
 function run(data: string, outer = true) {
     let output;
@@ -91,7 +117,6 @@ function parseValue(store: InputStore) {
     let output;
     const char = store.getNextNonWhitespace();
 
-    console.log(char)
     if (!char) {
         return null
     } else if (char === `"`) {
@@ -103,11 +128,16 @@ function parseValue(store: InputStore) {
     } else if (char === `{`) {
         output = parseObject(store)
     } else if (char === `-` || /[0-9]/.test(char)) {
-
+        // number
+        store.goBack()
+        output = parseNumber(store)
     } else if (/[a-zA-Z]/.test(char)) {
         // char is constant or extension
+        store.goBack()
+        output = parseSomething(store)
     } else {
-        debug(`unknown char: ${char}`)
+        // debug(`unknown char: ${char}`)
+        throwUnexpectedCharError(store)
     }
 
     return output
@@ -128,22 +158,22 @@ function parseString(store: InputStore) {
     return output;
 }
 
-// TODO not working
-function parseArray(store: InputStore) {
+function parseArray(store: InputStore, endChar = `]`) {
     let output: any[] = [];
-    while (true) {        
-        let char = store.getNextNonWhitespace();
-    
-        if (char === `]`) {
+    while (store.hasNext()) {        
+        let char = store.peekNextNonWhitespace();
+
+        if (char === endChar) {
+            store.getNextNonWhitespace()
+            console.log('end')
             break;
         } else if (char === `,` && output.length !== 0) {
-            char = store.getNextNonWhitespace()
+            store.getNextNonWhitespace()
         }
 
         const value = parseValue(store)
-
-        output.push(value)
-        
+        console.log(value)
+        output.push(value)        
     }
 
     return output
@@ -158,8 +188,6 @@ function parseObject(store: InputStore) {
     while (true) {        
         let char = store.getNextNonWhitespace();
     
-        // console.log(char)
-    
         if (char === `}`) {
             break;
         } else if (char === `,` && Object.keys(output).length !== 0) {
@@ -173,8 +201,6 @@ function parseObject(store: InputStore) {
         }
 
         const keyName = parseString(store)
-
-        console.log(keyName)
 
         // find next non whitespace char
         const nextChar = store.getNextNonWhitespace();
@@ -191,10 +217,56 @@ function parseObject(store: InputStore) {
     return output;
 }
 
+function parseSomething(store: InputStore) {
+    let word = '';
+    let output;
+    while (store.hasNext()) {
+        const char = store.getNextChar();
+        if (/[a-zA-Z0-9]/.test(char)) {
+            word+=char
+        } else if (char === `(` && word !== '') {
+            // prevent an extension with constant name
+            if (word in constants) {
+                throw new Error(`Invalid extension name: ${word}`)
+            }
+            output = parseExtension(word, store) 
+            break
+        } else {
+            if (word in constants) {
+                output = constants[word];
+                break
+            } else {
+                throw new Error(`Unknown constant `)
+            }
+        }
+    }
+
+    return output;
+}
+
+function parseExtension(name: string, store: InputStore) {
+    const args = parseArray(store, `)`);
+
+    // TODO check if extension exists, if so process, if not return name and args
+    // should it be a class or pure object?
+    return new UnprocessedExtension(name, args)
+}
+
+// TODO
+function parseNumber(store: InputStore) {
+    let buffer = ''
+    while (store.hasNext()) {
+        const char = store.getNextChar();
+        console.log(char)
+    }
+}
+
 // const input = `"deoweod"  `;
 // const input = `["valie", "val2", 202]`;
 // const input = `{"key": "value" , "key2" : "value2", "obj": {"in": "out"}}`;
-const input = `["hello"]`;
+// const input = `["hello", "fjdjd", {"test": "valu"} ]`;
+// const input = ` null()  `
+const input = `923`
 
 console.log(`
 ::::::::debug::::::::
