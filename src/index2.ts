@@ -77,38 +77,40 @@ function run(data: string, outer = true) {
 
     const store = new InputStore(data);
 
-    while (store.hasNext()) {
-        const char = store.getNextChar();
+    output = parseValue(store);
 
-        if (whitespace.includes(char)) {
-            debug('skipping whitespace')
-            continue;
-        }
-    
-        // if have an output then shouldnt be anything after
-        if (output) {
-            throwUnexpectedCharError(store)
-        }
-
-        console.log(char)
-    
-        if (char === `"`) {
-            debug('parsing string')
-            output = parseString(store)
-        } else if (char === `[`) {
-            // array
-        } else if (char === `{`) {
-            output = parseObject(store)
-        } else if (char === `-` || /[0-9]/.test(char)) {
-
-        } else if (/[a-zA-Z]/.test(char)) {
-            // char is constant or extension
-        } else {
-            debug(`unknown char: ${char}`)
-        }
+    if (store.getNextNonWhitespace()) {
+        throwUnexpectedCharError(store)
     }
 
     return output;
+}
+
+// Parse any value
+function parseValue(store: InputStore) {
+    let output;
+    const char = store.getNextNonWhitespace();
+
+    console.log(char)
+    if (!char) {
+        return null
+    } else if (char === `"`) {
+        debug('parsing string')
+        output = parseString(store)
+    } else if (char === `[`) {
+        // array
+        output = parseArray(store)
+    } else if (char === `{`) {
+        output = parseObject(store)
+    } else if (char === `-` || /[0-9]/.test(char)) {
+
+    } else if (/[a-zA-Z]/.test(char)) {
+        // char is constant or extension
+    } else {
+        debug(`unknown char: ${char}`)
+    }
+
+    return output
 }
 
 function parseString(store: InputStore) {
@@ -126,13 +128,25 @@ function parseString(store: InputStore) {
     return output;
 }
 
+// TODO not working
 function parseArray(store: InputStore) {
-    let output = [];
+    let output: any[] = [];
     while (true) {        
-        // TODO parse any value
+        let char = store.getNextNonWhitespace();
+    
+        if (char === `]`) {
+            break;
+        } else if (char === `,` && output.length !== 0) {
+            char = store.getNextNonWhitespace()
+        }
 
+        const value = parseValue(store)
+
+        output.push(value)
         
     }
+
+    return output
 }
 
 function parseObject(store: InputStore) {
@@ -169,13 +183,7 @@ function parseObject(store: InputStore) {
             throwUnexpectedCharError(store);
         }
 
-        // after this will be any value
-        // Only handling string for now
-        // TODO handle any value in object
-        const valueChar = store.getNextNonWhitespace();
-
-        const value = parseString(store); // temp
-        console.log(value)
+        const value = parseValue(store);
 
         output[keyName] = value
     }
@@ -185,7 +193,8 @@ function parseObject(store: InputStore) {
 
 // const input = `"deoweod"  `;
 // const input = `["valie", "val2", 202]`;
-const input = `{"key": "value" , "key2" : "value2"}`;
+// const input = `{"key": "value" , "key2" : "value2", "obj": {"in": "out"}}`;
+const input = `["hello"]`;
 
 console.log(`
 ::::::::debug::::::::
